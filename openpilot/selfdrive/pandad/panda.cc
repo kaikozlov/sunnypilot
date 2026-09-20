@@ -182,6 +182,11 @@ void Panda::pack_can_buffer(const capnp::List<cereal::CanData>::Reader &can_data
     assert(can_data.size() == dlc_to_len[data_len_code]);
 
     can_header header = {};
+    // Panda's first CAN packet header bit is FDF for host-created frames. Keep
+    // Classical CAN at <=8 bytes and mark all larger payloads explicitly FD;
+    // exact TSS3 disables canfd_auto on the diagnostic/sideband bus, so host
+    // formatting must not depend on sticky bus state.
+    header.fd = can_data.size() > 8U ? 1U : 0U;
     header.addr = cmsg.getAddress();
     header.extended = (cmsg.getAddress() >= 0x800) ? 1 : 0;
     header.data_len_code = data_len_code;

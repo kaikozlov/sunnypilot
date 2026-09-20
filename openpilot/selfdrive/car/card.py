@@ -21,6 +21,7 @@ from opendbc.car.interfaces import CarInterfaceBase, RadarInterfaceBase
 from openpilot.selfdrive.pandad import can_capnp_to_list, can_list_to_can_capnp
 from openpilot.selfdrive.car.cruise import VCruiseHelper
 from openpilot.selfdrive.car.helpers import convert_carControlSP, convert_to_capnp
+from openpilot.selfdrive.car.toyota_tss3_08a_signed import ToyotaTss3RequestProxy, request_plane_enabled
 
 from openpilot.sunnypilot.mads.helpers import set_alternative_experience, set_car_specific_params
 from openpilot.sunnypilot.selfdrive.car import interfaces as sunnypilot_interfaces
@@ -42,6 +43,7 @@ def obd_callback(params: Params) -> ObdCallback:
       params.get_bool("ObdMultiplexingChanged", block=True)
       cloudlog.warning("OBD multiplexing set successfully")
   return set_obd_multiplexing
+
 
 
 def can_comm_callbacks(logcan: messaging.SubSocket, sendcan: messaging.PubSocket) -> tuple[CanRecvCallable, CanSendCallable]:
@@ -73,6 +75,7 @@ class Car:
     self.can_sock = messaging.sub_sock('can', timeout=20)
     self.sm = messaging.SubMaster(['pandaStates', 'carControl', 'onroadEvents'] + ['carControlSP', 'longitudinalPlanSP'])
     self.pm = messaging.PubMaster(['sendcan', 'carState', 'carParams', 'carOutput', 'radarTracks'] + ['carParamsSP', 'carStateSP'])
+    self.sendcan_lock = threading.Lock()
 
     self.can_rcv_cum_timeout_counter = 0
 
@@ -138,6 +141,11 @@ class Car:
       safety_config.safetyModel = structs.CarParams.SafetyModel.noOutput
       self.CP.safetyConfigs = [safety_config]
 
+    self.tss3_08a_proxy = None
+    if request_plane_enabled(self.CP):
+      cloudlog.warning("enabling exact-F33 authenticated 0x08A request proxy")
+      self.tss3_08a_proxy = ToyotaTss3RequestProxy(self._send_can)
+
     if self.CP.secOcRequired:
       # Copy user key if available
       try:
@@ -189,6 +197,10 @@ class Car:
     # log fingerprint in sentry
     sunnypilot_interfaces.log_fingerprint(self.CP)
 
+  def _send_can(self, msgs: list[CanData], *, valid: bool = True) -> None:
+    with self.sendcan_lock:
+      self.pm.send('sendcan', can_list_to_can_capnp(msgs, msgtype='sendcan', valid=valid))
+
   def state_update(self) -> tuple[car.CarState, custom.CarStateSP, structs.RadarDataT | None]:
     """carState update loop, driven by can"""
 
@@ -198,6 +210,11 @@ class Car:
     # Update carState from CAN
     CS, CS_SP = self.CI.update(can_list)
     CS_SP = convert_to_capnp(CS_SP)
+    if self.tss3_08a_proxy is not None:
+      self.tss3_08a_proxy.update(can_list, CS)
+      CS.steerFaultTemporary = CS.steerFaultTemporary or self.tss3_08a_proxy.authority_unavailable()
+      if self.CP.openpilotLongitudinalControl:
+        CS.accFaulted = CS.accFaulted or self.tss3_08a_proxy.longitudinal_authority_unavailable()
 
     # Update radar tracks from CAN
     RD: structs.RadarDataT | None = self.RI.update(can_list)
@@ -278,12 +295,28 @@ class Car:
       self.params.put_bool("ControlsReady", True)
 
     if self.sm.all_alive(['carControl']):
+      if self.tss3_08a_proxy is not None and self.tss3_08a_proxy.consume_handoff_completed():
+        # The signer handoff is asynchronous. Align the normal CarController
+        # rate-limit baseline once with Panda's measured-angle baseline before
+        # the first modified source generation is transmitted.
+        self.CI.CC.reset_tss3_lateral_target(CS.steeringAngleDeg + CS.steeringAngleOffsetDeg)
+
       # send car controls over can
       now_nanos = self.can_log_mono_time if REPLAY else int(time.monotonic() * 1e9)
       self.last_actuators_output, can_sends = self.CI.apply(CC, convert_carControlSP(CC_SP), now_nanos)
-      self.pm.send('sendcan', can_list_to_can_capnp(can_sends, msgtype='sendcan', valid=CS.canValid))
+      if self.tss3_08a_proxy is not None:
+        # MADS can own lateral control without ordinary selfdrive engagement.
+        # Longitudinal authority remains gated by the normal enabled state.
+        self.tss3_08a_proxy.set_control(CC.enabled or CC.latActive, CC.latActive, self.last_actuators_output.steeringAngleDeg,
+                                       long_enabled=self.CP.openpilotLongitudinalControl and CC.enabled,
+                                       long_active=self.CP.openpilotLongitudinalControl and CC.longActive,
+                                       accel=self.last_actuators_output.accel)
+      self._send_can(can_sends, valid=CS.canValid)
 
       self.CC_prev = CC
+    elif self.tss3_08a_proxy is not None:
+      # Never let the asynchronous signer outlive the normal CarControl stream.
+      self.tss3_08a_proxy.set_control(False, False, 0.0)
 
   def step(self):
     CS, CS_SP, RD = self.state_update()
@@ -319,6 +352,8 @@ class Car:
         self.step()
         self.rk.monitor_time()
     finally:
+      if self.tss3_08a_proxy is not None:
+        self.tss3_08a_proxy.shutdown()
       e.set()
       t.join()
 
