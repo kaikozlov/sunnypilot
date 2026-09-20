@@ -390,7 +390,8 @@ class ToyotaTss3RequestProxy:
     self._maybe_arm_locked()
 
   def _observe_tx_echo_locked(self, address: int, data: bytes, src: int,
-                              gas_pressed: bool, brake_pressed: bool, cancel_pressed: bool) -> None:
+                              gas_pressed: bool, brake_pressed: bool, cancel_pressed: bool,
+                              cruise_disengaged: bool) -> None:
     if address == ADMIN_ADDR and self.arm_pending and data == make_admin(True).dat:
       if src == ADMIN_BUS + PANDA_REJECTED_OFFSET:
         self._authority_failure_locked("arm_admin_rejected")
@@ -405,11 +406,11 @@ class ToyotaTss3RequestProxy:
     elif src == DOWNSTREAM_BUS + PANDA_REJECTED_OFFSET and self.arm_pending and data == self.arm_clone_frame:
       self._authority_failure_locked("handoff_clone_rejected")
     elif src == DOWNSTREAM_BUS + PANDA_REJECTED_OFFSET and self.active:
-      # Panda can observe a pedal or cancel edge before card publishes the
-      # corresponding inactive/release command. A rejected command already
-      # queued across that edge is an ordinary TX safety outcome, not lost
-      # authority.
-      if not gas_pressed and not brake_pressed and not cancel_pressed:
+      # Panda can observe a pedal, cancel, or native PCM disengagement before
+      # card publishes the corresponding inactive/release command. A rejected
+      # command already queued across that edge is an ordinary TX safety
+      # outcome, not lost authority.
+      if not gas_pressed and not brake_pressed and not cancel_pressed and not cruise_disengaged:
         cloudlog.event("toyota_f33_request_plane_tx_reject", native_index=self.native_index, error=True)
         self._release_control_locked()
 
@@ -529,6 +530,8 @@ class ToyotaTss3RequestProxy:
       brake_pressed = bool(getattr(CS, "brakePressed", False))
       cancel_pressed = any(button.type == ButtonType.cancel and button.pressed
                            for button in getattr(CS, "buttonEvents", ()))
+      cruise_state = getattr(CS, "cruiseState", None)
+      cruise_disengaged = cruise_state is not None and not bool(cruise_state.enabled)
       if not self.can_valid and (self.active or self.arm_pending):
         self._authority_failure_locked("can_invalid")
         self.tracker.reset()
@@ -536,7 +539,8 @@ class ToyotaTss3RequestProxy:
         for address, dat, src in packets:
           address_i, src_i, data = int(address), int(src), bytes(dat)
           if src_i >= PANDA_RETURNED_OFFSET:
-            self._observe_tx_echo_locked(address_i, data, src_i, gas_pressed, brake_pressed, cancel_pressed)
+            self._observe_tx_echo_locked(address_i, data, src_i, gas_pressed, brake_pressed,
+                                         cancel_pressed, cruise_disengaged)
           elif src_i == SYNC_BUS and address_i == SECOC_SYNC_ADDR:
             self._observe_sync_locked(data)
           elif src_i == UPSTREAM_BUS and address_i == NATIVE_08A_ADDR:
