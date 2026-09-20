@@ -91,14 +91,25 @@ function launch {
   # start manager
   cd openpilot/system/manager
   # This development branch carries source-level Panda safety changes. Release
-  # overlays can include ignored build outputs, so invalidate the Panda app and
-  # its safety-bearing object before building from the checked-out sources.
-  rm -f "$DIR/prebuilt"
-  rm -f "$DIR/panda/board/board/obj/panda_h7main.o"
-  rm -f "$DIR/panda/board/obj/panda_h7/main.elf"
-  rm -f "$DIR/panda/board/obj/panda_h7/main.bin"
-  rm -f "$DIR/panda/board/obj/panda_h7.bin.signed"
-  SCONSFLAGS="--cache-disable ${SCONSFLAGS:-}" ./build.py
+  # overlays can include ignored build outputs. Force one source build whenever
+  # the safety-bearing Panda or opendbc revision changes, then let normal SCons
+  # dependency checks handle later boots without rebuilding the firmware.
+  PANDA_BUILD_STAMP="/data/.tss3_panda_build_revision"
+  PANDA_SOURCE_REVISION="$(git -C "$DIR/panda" rev-parse HEAD):$(git -C "$DIR/opendbc_repo" rev-parse HEAD)"
+  if [ ! -f "$PANDA_BUILD_STAMP" ] || [ "$(< "$PANDA_BUILD_STAMP")" != "$PANDA_SOURCE_REVISION" ]; then
+    rm -f "$DIR/prebuilt"
+    rm -f "$DIR/panda/board/board/obj/panda_h7main.o"
+    rm -f "$DIR/panda/board/obj/panda_h7/main.elf"
+    rm -f "$DIR/panda/board/obj/panda_h7/main.bin"
+    rm -f "$DIR/panda/board/obj/panda_h7.bin.signed"
+    if SCONSFLAGS="--cache-disable ${SCONSFLAGS:-}" ./build.py; then
+      printf '%s\n' "$PANDA_SOURCE_REVISION" > "$PANDA_BUILD_STAMP"
+    else
+      exit 1
+    fi
+  elif [ ! -f "$DIR/prebuilt" ]; then
+    ./build.py
+  fi
   ./manager.py
 
   # if broken, keep on screen error
