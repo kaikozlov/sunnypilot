@@ -5,7 +5,9 @@
 #include "common/params.h"
 #include "selfdrive/pandad/panda.h"
 
-void pandad_main_thread(std::string serial);
+constexpr int TSS3_ORACLE_HANDOFF_EXIT_CODE = 42;
+
+int pandad_main_thread(std::string serial);
 
 // deprecated devices
 static const std::vector<cereal::PandaState::PandaType> SUPPORTED_PANDA_TYPES = {

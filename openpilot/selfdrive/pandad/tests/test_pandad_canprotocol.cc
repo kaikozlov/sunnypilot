@@ -58,6 +58,7 @@ void PandaTest::test_can_send() {
     pckt_len = sizeof(can_header) + data_len;
 
     CHECK(header.addr == cnt);
+    CHECK(header.fd == (data_len > 8));
     CHECK(test_data.find(data_len) != test_data.end());
     const std::string &dat = test_data[data_len];
     CHECK(memcmp(dat.data(), &unpacked_data[pos + sizeof(can_header)], dat.size()) == 0);
