@@ -31,6 +31,10 @@ _listener: socket.socket | None = None
 _warm_worker: subprocess.Popen[str] | None = None
 
 
+def _warm_worker_ready() -> bool:
+  return _warm_worker is not None and _warm_worker.poll() is None and WARM_WORKER_PATH.is_socket()
+
+
 def _write_status(state: str, detail: str, **extra: Any) -> None:
   status: dict[str, Any] = {
     "schema": STATUS_SCHEMA,
@@ -135,15 +139,29 @@ def _claim_native_catch(path: Path = NATIVE_CATCH_PATH) -> tuple[Path, dict[str,
     marker = json.loads(path.read_text(encoding="utf-8"))
   except (FileNotFoundError, json.JSONDecodeError, OSError):
     return None
+  if not isinstance(marker, dict):
+    return None
   if marker.get("schema") != "tss3-oracle-native-catch-v1":
     return None
   if marker.get("target") != "TOYOTA_CAMRY_TSS3":
     return None
   if marker.get("verdict") != "programming_request_sent_after_exact_50_03":
     return None
-  programming_ns = marker.get("programming_tx_monotonic_ns")
-  if not isinstance(programming_ns, int) or programming_ns <= 0:
+
+  required_times = (
+    "ignition_monotonic_ns",
+    "first_extended_tx_monotonic_ns",
+    "positive_extended_monotonic_ns",
+    "programming_tx_monotonic_ns",
+  )
+  if any(not isinstance(marker.get(key), int) or marker[key] <= 0 for key in required_times):
     return None
+  if marker["positive_extended_monotonic_ns"] < marker["first_extended_tx_monotonic_ns"]:
+    return None
+  if marker["programming_tx_monotonic_ns"] < marker["positive_extended_monotonic_ns"]:
+    return None
+
+  programming_ns = marker["programming_tx_monotonic_ns"]
   wrapper_pid = marker.get("pandad_wrapper_pid")
   if not isinstance(wrapper_pid, int) or wrapper_pid <= 1:
     return None
@@ -226,7 +244,7 @@ def _run_bringup(native_catch_path: Path, native_catch: dict[str, Any], *, catch
   stamp = time.strftime("%Y%m%dT%H%M%S", time.localtime())
   RUN_ROOT.mkdir(parents=True, exist_ok=True)
   run_dir, log_path, trigger_fallback = _allocate_run_path(stamp=stamp, catch_received_ns=catch_received_ns)
-  if _warm_worker is None or _warm_worker.poll() is not None or not WARM_WORKER_PATH.is_socket():
+  if not _warm_worker_ready():
     _write_status("error", "native PROGRAMMING was caught but the warm oracle uploader is unavailable")
     return False
   cmd = [
@@ -347,15 +365,27 @@ def main() -> None:
   _listener = listener
   NATIVE_NOTIFY_PATH.unlink(missing_ok=True)
   listener.bind(str(NATIVE_NOTIFY_PATH))
+  # Do not block forever here.  The warm uploader is deliberately a separate
+  # process and can die while the vehicle remains OFF; without a bounded wakeup
+  # the daemon would stay alive with a stale "armed" status, then lose the next
+  # already-caught PROGRAMMING transition because no worker exists to take it.
+  listener.settimeout(0.25)
 
   try:
     if not _start_warm_worker():
       return
     while not _exit_requested:
+      if not _warm_worker_ready():
+        cloudlog.warning("tss3oracled warm uploader disappeared while armed; restarting it")
+        if not _start_warm_worker():
+          break
+
       claimed = _claim_native_catch()
       if claimed is None:
         try:
           listener.recv(1)
+        except TimeoutError:
+          continue
         except OSError:
           if _exit_requested:
             break
@@ -379,6 +409,8 @@ def main() -> None:
     listener.close()
     _listener = None
     NATIVE_NOTIFY_PATH.unlink(missing_ok=True)
+    if _exit_requested:
+      _write_status("stopped", "Automatic TSS3 oracle uploader stopped.")
 
 
 if __name__ == "__main__":

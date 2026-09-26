@@ -8,7 +8,11 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from openpilot.selfdrive.car import toyota_tss3_oracle_auto as auto
-from openpilot.selfdrive.ui.mici.layouts.settings.tss3_oracle import Tss3OracleBringupPage
+from openpilot.selfdrive.ui.mici.layouts.settings.tss3_oracle import (
+  CANCEL_FILENAME,
+  Tss3OracleBringupPage,
+  request_cooperative_cancel,
+)
 
 
 STATUS_SCHEMA = "camry-f33-oracle-ui-status-v1"
@@ -172,6 +176,42 @@ class TestOracleAutoReporting(unittest.TestCase):
     success, call = self.run_report({}, returncode=2, rows=[row])
     self.assertFalse(success)
     self.assertEqual(call.args[1], "Original failure.")
+
+
+class TestOracleLifecycleGuards(unittest.TestCase):
+  def test_manual_cancel_is_cooperative_file_request(self):
+    with tempfile.TemporaryDirectory() as td:
+      run_dir = Path(td) / "run"
+      request_cooperative_cancel(run_dir)
+      self.assertEqual((run_dir / CANCEL_FILENAME).read_text(encoding="utf-8"), "cancel\n")
+
+  def test_warm_worker_ready_requires_live_process_and_socket(self):
+    with patch.object(auto, "_warm_worker", Mock(poll=Mock(return_value=None))), \
+         patch.object(auto, "WARM_WORKER_PATH", Mock(is_socket=Mock(return_value=True))):
+      self.assertTrue(auto._warm_worker_ready())
+    with patch.object(auto, "_warm_worker", Mock(poll=Mock(return_value=2))), \
+         patch.object(auto, "WARM_WORKER_PATH", Mock(is_socket=Mock(return_value=True))):
+      self.assertFalse(auto._warm_worker_ready())
+    with patch.object(auto, "_warm_worker", Mock(poll=Mock(return_value=None))), \
+         patch.object(auto, "WARM_WORKER_PATH", Mock(is_socket=Mock(return_value=False))):
+      self.assertFalse(auto._warm_worker_ready())
+
+  def test_native_catch_rejects_reversed_transition_before_claim(self):
+    marker = {
+      "schema": "tss3-oracle-native-catch-v1",
+      "target": "TOYOTA_CAMRY_TSS3",
+      "verdict": "programming_request_sent_after_exact_50_03",
+      "pandad_wrapper_pid": 123,
+      "ignition_monotonic_ns": 10,
+      "first_extended_tx_monotonic_ns": 20,
+      "positive_extended_monotonic_ns": 40,
+      "programming_tx_monotonic_ns": 30,
+    }
+    with tempfile.TemporaryDirectory() as td:
+      path = Path(td) / "catch.json"
+      path.write_text(json.dumps(marker), encoding="utf-8")
+      self.assertIsNone(auto._claim_native_catch(path))
+      self.assertTrue(path.exists())
 
 
 class TestOracleRearmReporting(unittest.TestCase):

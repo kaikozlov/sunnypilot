@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import signal
 import subprocess
 import threading
 import time
@@ -16,6 +15,7 @@ from openpilot.system.ui.widgets.scroller import NavScroller
 
 TOOL_PATH = Path(os.getenv("TSS3_ORACLE_TOOL", "/data/tss3-oracle/tss3-unified-signer"))
 RUN_ROOT = Path(os.getenv("TSS3_ORACLE_RUN_ROOT", "/data/tss3-oracle-runs"))
+CANCEL_FILENAME = "cancel-requested"
 
 _oracle_bringup_active = False
 
@@ -43,6 +43,22 @@ def oracle_bringup_active() -> bool:
   return _oracle_bringup_active
 
 
+def request_cooperative_cancel(run_dir: Path) -> None:
+  """Ask the backend to stop only while PROGRAMMING is still avoidable.
+
+  Never kill the bringup process group here.  If 10 02 has already crossed the
+  wire, the backend deliberately ignores this late request and completes the RAM
+  handoff rather than abandoning the EPS between application and bootloader.
+  """
+  try:
+    run_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / CANCEL_FILENAME).write_text("cancel\n", encoding="utf-8")
+  except OSError:
+    # Closing the UI must remain best-effort; the running backend is safer than
+    # escalating a cancellation failure into a force-kill.
+    pass
+
+
 class Tss3OracleBringupPage(NavScroller):
   """Native comma-four page for the exact-F33 RAM-oracle startup flow."""
 
@@ -65,7 +81,7 @@ class Tss3OracleBringupPage(NavScroller):
     self._progress_card = GreyBigButton("progress", "0%\nstarting")
     self._contract_card = GreyBigButton(
       "RAM-only startup path",
-      "No EPS flash writes.\nNo Brake/FRC resets on a healthy run.\nKeep the vehicle in Park.",
+      "No EPS flash writes.\nCancellation is cooperative before PROGRAMMING.\nKeep the vehicle in Park.",
     )
     self._action_button = BigButton("cancel bringup", "swipe down also works")
     self._action_button.set_click_callback(self.dismiss)
@@ -92,11 +108,9 @@ class Tss3OracleBringupPage(NavScroller):
 
     status = self._snapshot()
     proc = self._proc
-    if proc is not None and proc.poll() is None and not status.get("done") and not status.get("error"):
-      try:
-        os.killpg(proc.pid, signal.SIGTERM)
-      except ProcessLookupError:
-        pass
+    if (proc is not None and proc.poll() is None and not status.get("done") and not status.get("error")
+        and self._run_dir is not None):
+      request_cooperative_cancel(self._run_dir)
 
     super().hide_event()
 
@@ -128,7 +142,7 @@ class Tss3OracleBringupPage(NavScroller):
       return
 
     stamp = time.strftime("%Y%m%dT%H%M%S", time.localtime())
-    self._run_dir = RUN_ROOT / f"{stamp}-{os.getpid()}"
+    self._run_dir = RUN_ROOT / f"{stamp}-{os.getpid()}-{time.monotonic_ns()}"
     cmd = [str(TOOL_PATH), "--topology", "camry-post-repin", "oracle-ui-bringup", str(self._run_dir)]
 
     try:
@@ -200,6 +214,9 @@ class Tss3OracleBringupPage(NavScroller):
     elif status.get("error"):
       self._action_button.set_text("close")
       self._action_button.set_value("bringup failed")
-    else:
+    elif stage in ("arming", "armed"):
       self._action_button.set_text("cancel bringup")
-      self._action_button.set_value("swipe down also works")
+      self._action_button.set_value("cooperative before PROGRAMMING")
+    else:
+      self._action_button.set_text("close")
+      self._action_button.set_value("bringup continues safely in background")
