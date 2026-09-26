@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import os
 import signal
 import subprocess
@@ -10,13 +9,13 @@ from pathlib import Path
 from typing import Any
 
 from openpilot.selfdrive.car.toyota_tss3_oracle_kit import oracle_kit_compatibility
+from openpilot.selfdrive.car.toyota_tss3_oracle_status import parse_status, process_status
 from openpilot.selfdrive.ui.ui_state import device
 from openpilot.selfdrive.ui.mici.widgets.button import BigButton, GreyBigButton
 from openpilot.system.ui.widgets.scroller import NavScroller
 
 TOOL_PATH = Path(os.getenv("TSS3_ORACLE_TOOL", "/data/tss3-oracle/tss3-unified-signer"))
 RUN_ROOT = Path(os.getenv("TSS3_ORACLE_RUN_ROOT", "/data/tss3-oracle-runs"))
-STATUS_SCHEMA = "camry-f33-oracle-ui-status-v1"
 
 _oracle_bringup_active = False
 
@@ -25,7 +24,8 @@ STAGE_LABELS = {
   "armed": "waiting for POWER",
   "programming": "installing RAM oracle",
   "waiting_ready": "waiting for READY / Park",
-  "verifying": "checking DRCC + native MAC",
+  "verifying": "checking peer health + signer",
+  "finishing": "waiting for backend exit",
   "done": "complete",
   "error": "failed",
 }
@@ -139,6 +139,8 @@ class Tss3OracleBringupPage(NavScroller):
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         bufsize=1,
         start_new_session=True,
       )
@@ -157,32 +159,30 @@ class Tss3OracleBringupPage(NavScroller):
 
   def _reader(self) -> None:
     assert self._proc is not None and self._proc.stdout is not None
+    latest_status: dict[str, Any] | None = None
     for raw in self._proc.stdout:
       line = raw.strip()
       if not line:
         continue
-      try:
-        status = json.loads(line)
-      except json.JSONDecodeError:
+      status = parse_status(line)
+      if status is None:
         with self._lock:
           self._last_output = line
         continue
-      if isinstance(status, dict) and status.get("schema") == STATUS_SCHEMA:
-        self._set_status(status)
+      if latest_status is None or not latest_status.get("error"):
+        latest_status = status
+        if status["done"]:
+          self._set_status({
+            **status, "stage": "finishing", "title": "Finalizing bringup",
+            "detail": "Waiting for the backend to finish.", "done": False,
+          })
+        else:
+          self._set_status(status)
 
     rc = self._proc.wait()
-    status = self._snapshot()
-    if not status.get("done") and not status.get("error"):
-      with self._lock:
-        detail = self._last_output or f"backend exited with status {rc}"
-      self._set_status({
-        "stage": "error",
-        "title": "Oracle bringup stopped",
-        "detail": detail,
-        "progress": 0,
-        "done": False,
-        "error": True,
-      })
+    with self._lock:
+      last_output = self._last_output
+    self._set_status(process_status(latest_status, rc, last_output))
 
   def _update_state(self):
     super()._update_state()

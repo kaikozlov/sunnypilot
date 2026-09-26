@@ -14,12 +14,12 @@ from typing import Any
 from openpilot.common.swaglog import cloudlog
 from openpilot.common.utils import atomic_write
 from openpilot.selfdrive.car.toyota_tss3_oracle_kit import oracle_kit_compatibility
+from openpilot.selfdrive.car.toyota_tss3_oracle_status import SUMMARY_SCHEMA, SUCCESS_VERDICT, parse_status, process_status
 
 TOOL_PATH = Path(os.getenv("TSS3_ORACLE_TOOL", "/data/tss3-oracle/tss3-unified-signer"))
 RUN_ROOT = Path(os.getenv("TSS3_ORACLE_RUN_ROOT", "/data/tss3-oracle-runs"))
 STATUS_PATH = Path(os.getenv("TSS3_ORACLE_AUTO_STATUS", "/data/tss3-oracle-auto-status.json"))
 STATUS_SCHEMA = "tss3-oracle-auto-arm-status-v1"
-BACKEND_STATUS_SCHEMA = "camry-f33-oracle-ui-status-v1"
 NATIVE_CATCH_PATH = Path(os.getenv("TSS3_ORACLE_NATIVE_CATCH", "/tmp/tss3-oracle-native-catch.json"))
 NATIVE_NOTIFY_PATH = Path(os.getenv("TSS3_ORACLE_NATIVE_NOTIFY", "/tmp/tss3-oracle-native-catch.sock"))
 WARM_WORKER_PATH = Path(os.getenv("TSS3_ORACLE_WARM_WORKER", "/tmp/tss3-oracle-warm-worker.sock"))
@@ -76,7 +76,7 @@ def _stop_warm_worker() -> None:
   WARM_WORKER_PATH.unlink(missing_ok=True)
 
 
-def _start_warm_worker() -> bool:
+def _start_warm_worker(*, publish_ready_status: bool = True) -> bool:
   global _warm_worker
   _stop_warm_worker()
   compatible, detail = oracle_kit_compatibility(TOOL_PATH)
@@ -110,7 +110,8 @@ def _start_warm_worker() -> bool:
       _warm_worker = None
       return False
     if WARM_WORKER_PATH.is_socket():
-      _write_status("armed", "Automatic TSS3 oracle uploader is warm and waiting for native vehicle wake/start detection.")
+      if publish_ready_status:
+        _write_status("armed", "Automatic TSS3 oracle uploader is warm and waiting for native vehicle wake/start detection.")
       return True
     time.sleep(0.02)
 
@@ -252,6 +253,8 @@ def _run_bringup(native_catch_path: Path, native_catch: dict[str, Any], *, catch
       stdout=subprocess.PIPE,
       stderr=subprocess.STDOUT,
       text=True,
+      encoding="utf-8",
+      errors="replace",
       bufsize=1,
       start_new_session=True,
     )
@@ -263,6 +266,7 @@ def _run_bringup(native_catch_path: Path, native_catch: dict[str, Any], *, catch
     _child = proc
 
   latest_backend_status: dict[str, Any] | None = None
+  last_output = ""
   try:
     assert proc.stdout is not None
     with log_path.open("w", encoding="utf-8") as log:
@@ -272,11 +276,11 @@ def _run_bringup(native_catch_path: Path, native_catch: dict[str, Any], *, catch
         line = raw.strip()
         if not line:
           continue
-        try:
-          row = json.loads(line)
-        except json.JSONDecodeError:
+        row = parse_status(line)
+        if row is None:
+          last_output = line
           continue
-        if isinstance(row, dict) and row.get("schema") == BACKEND_STATUS_SCHEMA:
+        if latest_backend_status is None or not latest_backend_status.get("error"):
           latest_backend_status = row
           _write_status(
             "running",
@@ -301,14 +305,20 @@ def _run_bringup(native_catch_path: Path, native_catch: dict[str, Any], *, catch
     returncode=returncode,
   )
 
-  summary_path = run_dir / "summary.json"
-  success = returncode == 0 and summary_path.is_file()
+  final_status = process_status(latest_backend_status, returncode, last_output)
+  success = not final_status["error"]
+  detail = final_status["detail"]
   if success:
+    summary_path = run_dir / "summary.json"
     try:
       summary = json.loads(summary_path.read_text(encoding="utf-8"))
-      success = summary.get("verdict") == "startup_caught_oracle_resident_peer_state_healthy_known_answer_pass"
-    except (OSError, json.JSONDecodeError):
+      success = (isinstance(summary, dict) and summary.get("schema") == SUMMARY_SCHEMA
+                 and summary.get("verdict") == SUCCESS_VERDICT)
+      if not success:
+        detail = "Could not verify bringup: summary does not match the current backend contract."
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
       success = False
+      detail = f"Could not read bringup summary: {type(exc).__name__}: {exc}"
 
   if success:
     _write_status(
@@ -318,9 +328,6 @@ def _run_bringup(native_catch_path: Path, native_catch: dict[str, Any], *, catch
       trigger_timing=timing,
     )
   else:
-    detail = "Automatic TSS3 oracle bringup failed."
-    if latest_backend_status is not None:
-      detail = str(latest_backend_status.get("detail", detail))
     _write_status(
       "error",
       detail,
@@ -363,7 +370,8 @@ def main() -> None:
         )
       finally:
         claimed_path.unlink(missing_ok=True)
-      if not _exit_requested and not _start_warm_worker():
+      # Re-arming must not immediately erase the previous run's result.
+      if not _exit_requested and not _start_warm_worker(publish_ready_status=False):
         break
   finally:
     _terminate_child()
