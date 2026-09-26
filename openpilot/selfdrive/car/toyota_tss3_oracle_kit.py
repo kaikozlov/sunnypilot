@@ -15,7 +15,7 @@ def oracle_kit_compatibility(tool_path: Path) -> tuple[bool, str]:
   try:
     meta = json.loads(meta_path.read_text(encoding="utf-8"))
     target = meta["target"]["name"]
-  except (FileNotFoundError, OSError, json.JSONDecodeError, KeyError, TypeError):
+  except (OSError, UnicodeDecodeError, json.JSONDecodeError, KeyError, TypeError):
     return False, f"oracle kit metadata invalid: {meta_path}"
 
   if target != EXPECTED_ORACLE_TARGET:

@@ -28,6 +28,17 @@ class TestToyotaTss3OracleKit(unittest.TestCase):
       self.assertFalse(compatible)
       self.assertEqual(detail, f"wrong oracle kit: corolla-8965F1208000; need {EXPECTED_ORACLE_TARGET}")
 
+  def test_rejects_unreadable_metadata_without_crashing(self):
+    with tempfile.TemporaryDirectory() as td:
+      root = Path(td)
+      tool = self.make_tool(root, EXPECTED_ORACLE_TARGET)
+      for data in (b"{", b'\xff{"target":{}}'):
+        with self.subTest(data=data):
+          (root / "bundle/unified.json").write_bytes(data)
+          compatible, detail = oracle_kit_compatibility(tool)
+          self.assertFalse(compatible)
+          self.assertTrue(detail.startswith("oracle kit metadata invalid:"))
+
   def test_rejects_missing_metadata(self):
     with tempfile.TemporaryDirectory() as td:
       root = Path(td)

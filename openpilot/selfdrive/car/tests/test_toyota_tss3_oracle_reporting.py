@@ -71,6 +71,11 @@ class TestOracleUiReporting(unittest.TestCase):
     self.assertIs(result["error"], True)
     self.assertEqual(result["detail"], error["detail"])
 
+  def test_json_diagnostic_is_kept_when_process_fails(self):
+    result = read_ui([{"error": "permission denied opening log file"}], returncode=1)
+    self.assertIs(result["error"], True)
+    self.assertIn("permission denied opening log file", result["detail"])
+
   def test_malformed_status_cannot_report_success(self):
     for overrides in (
       {"progress": "not-a-number"}, {"progress": None}, {"progress": True},
@@ -97,7 +102,8 @@ class TestOracleAutoReporting(unittest.TestCase):
 
       def launch(*_args, **_kwargs):
         run_dir.mkdir()
-        (run_dir / "summary.json").write_text(json.dumps(summary), encoding="utf-8")
+        data = summary if isinstance(summary, bytes) else json.dumps(summary).encode("utf-8")
+        (run_dir / "summary.json").write_bytes(data)
         return proc
 
       with patch.object(auto, "RUN_ROOT", root), \
@@ -123,6 +129,14 @@ class TestOracleAutoReporting(unittest.TestCase):
         success, call = self.run_report(summary)
         self.assertFalse(success)
         self.assertEqual(call.args[0], "error")
+
+  def test_unreadable_summary_is_an_error_not_a_daemon_crash(self):
+    for summary in (b"{", b'\xff{"verdict":"incomplete"}'):
+      with self.subTest(summary=summary):
+        success, call = self.run_report(summary)
+        self.assertFalse(success)
+        self.assertEqual(call.args[0], "error")
+        self.assertIn("Could not read bringup summary", call.args[1])
 
   def test_wrong_contract_does_not_reuse_success_detail(self):
     for summary in (
