@@ -16,7 +16,7 @@ from openpilot.common.utils import atomic_write
 from openpilot.selfdrive.car.toyota_tss3_oracle_kit import oracle_kit_compatibility
 from openpilot.selfdrive.car.toyota_tss3_oracle_status import SUMMARY_SCHEMA, SUCCESS_VERDICT, parse_status, process_status
 
-TOOL_PATH = Path(os.getenv("TSS3_ORACLE_TOOL", "/data/tss3-oracle/tss3-unified-signer"))
+TOOL_PATH = Path(os.getenv("TSS3_ORACLE_TOOL", "/data/tss3-oracle/tss3-request-signer"))
 RUN_ROOT = Path(os.getenv("TSS3_ORACLE_RUN_ROOT", "/data/tss3-oracle-runs"))
 STATUS_PATH = Path(os.getenv("TSS3_ORACLE_AUTO_STATUS", "/data/tss3-oracle-auto-status.json"))
 STATUS_SCHEMA = "tss3-oracle-auto-arm-status-v1"
@@ -89,8 +89,7 @@ def _start_warm_worker(*, publish_ready_status: bool = True) -> bool:
     return False
 
   cmd = [
-    str(TOOL_PATH), "--topology", "camry-post-repin", "oracle-ui-worker",
-    str(WARM_WORKER_PATH), str(os.getpid()),
+    str(TOOL_PATH), "ui-worker", str(WARM_WORKER_PATH), str(os.getpid()),
   ]
   try:
     proc = subprocess.Popen(
@@ -248,7 +247,7 @@ def _run_bringup(native_catch_path: Path, native_catch: dict[str, Any], *, catch
     _write_status("error", "native PROGRAMMING was caught but the warm oracle uploader is unavailable")
     return False
   cmd = [
-    str(TOOL_PATH), "--topology", "camry-post-repin", "oracle-ui-resume-warm",
+    str(TOOL_PATH), "ui-resume-warm",
     str(WARM_WORKER_PATH), str(native_catch_path), str(run_dir), str(native_catch["pandad_wrapper_pid"]),
   ]
   launch_ns = time.monotonic_ns()

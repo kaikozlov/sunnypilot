@@ -13,7 +13,7 @@ from openpilot.selfdrive.ui.ui_state import device
 from openpilot.selfdrive.ui.mici.widgets.button import BigButton, GreyBigButton
 from openpilot.system.ui.widgets.scroller import NavScroller
 
-TOOL_PATH = Path(os.getenv("TSS3_ORACLE_TOOL", "/data/tss3-oracle/tss3-unified-signer"))
+TOOL_PATH = Path(os.getenv("TSS3_ORACLE_TOOL", "/data/tss3-oracle/tss3-request-signer"))
 RUN_ROOT = Path(os.getenv("TSS3_ORACLE_RUN_ROOT", "/data/tss3-oracle-runs"))
 CANCEL_FILENAME = "cancel-requested"
 
@@ -143,7 +143,7 @@ class Tss3OracleBringupPage(NavScroller):
 
     stamp = time.strftime("%Y%m%dT%H%M%S", time.localtime())
     self._run_dir = RUN_ROOT / f"{stamp}-{os.getpid()}-{time.monotonic_ns()}"
-    cmd = [str(TOOL_PATH), "--topology", "camry-post-repin", "oracle-ui-bringup", str(self._run_dir)]
+    cmd = [str(TOOL_PATH), "ui-bringup", str(self._run_dir)]
 
     try:
       self._proc = subprocess.Popen(

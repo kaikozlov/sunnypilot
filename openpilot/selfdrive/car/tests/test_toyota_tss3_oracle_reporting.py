@@ -15,8 +15,8 @@ from openpilot.selfdrive.ui.mici.layouts.settings.tss3_oracle import (
 )
 
 
-STATUS_SCHEMA = "camry-f33-oracle-ui-status-v1"
-SUMMARY_SCHEMA = "camry-f33-oracle-ui-bringup-v1"
+STATUS_SCHEMA = "camry-f33-request-signer-ui-status-v1"
+SUMMARY_SCHEMA = "camry-f33-request-signer-ui-bringup-v1"
 SUCCESS_VERDICT = "startup_caught_fresh_signer_peer_state_healthy_self_test_pass"
 
 

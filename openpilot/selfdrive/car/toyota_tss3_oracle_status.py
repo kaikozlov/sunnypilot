@@ -4,8 +4,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
-STATUS_SCHEMA = "camry-f33-oracle-ui-status-v1"
-SUMMARY_SCHEMA = "camry-f33-oracle-ui-bringup-v1"
+STATUS_SCHEMA = "camry-f33-request-signer-ui-status-v1"
+SUMMARY_SCHEMA = "camry-f33-request-signer-ui-bringup-v1"
 SUCCESS_VERDICT = "startup_caught_fresh_signer_peer_state_healthy_self_test_pass"
 
 
@@ -37,6 +37,6 @@ def process_status(status: dict[str, Any] | None, returncode: int, last_output: 
   if last_output:
     detail += f" Last output: {last_output}"
   return {
-    "schema": STATUS_SCHEMA, "stage": "error", "title": "Oracle bringup stopped",
+    "schema": STATUS_SCHEMA, "stage": "error", "title": "Request-signer bringup stopped",
     "detail": detail, "progress": 0, "done": False, "error": True,
   }

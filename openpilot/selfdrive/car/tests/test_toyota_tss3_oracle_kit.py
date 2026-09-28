@@ -8,12 +8,12 @@ from openpilot.selfdrive.car.toyota_tss3_oracle_kit import EXPECTED_ORACLE_TARGE
 
 class TestToyotaTss3OracleKit(unittest.TestCase):
   def make_tool(self, root: Path, target: str) -> Path:
-    tool = root / "tss3-unified-signer"
+    tool = root / "tss3-request-signer"
     tool.write_text("#!/bin/sh\n", encoding="utf-8")
     tool.chmod(0o755)
     bundle = root / "bundle"
     bundle.mkdir()
-    (bundle / "unified.json").write_text(json.dumps({"target": {"name": target}}), encoding="utf-8")
+    (bundle / "request_signer.json").write_text(json.dumps({"target": {"name": target}}), encoding="utf-8")
     return tool
 
   def test_accepts_exact_f33(self):
@@ -34,7 +34,7 @@ class TestToyotaTss3OracleKit(unittest.TestCase):
       tool = self.make_tool(root, EXPECTED_ORACLE_TARGET)
       for data in (b"{", b'\xff{"target":{}}'):
         with self.subTest(data=data):
-          (root / "bundle/unified.json").write_bytes(data)
+          (root / "bundle/request_signer.json").write_bytes(data)
           compatible, detail = oracle_kit_compatibility(tool)
           self.assertFalse(compatible)
           self.assertTrue(detail.startswith("oracle kit metadata invalid:"))
@@ -42,7 +42,7 @@ class TestToyotaTss3OracleKit(unittest.TestCase):
   def test_rejects_missing_metadata(self):
     with tempfile.TemporaryDirectory() as td:
       root = Path(td)
-      tool = root / "tss3-unified-signer"
+      tool = root / "tss3-request-signer"
       tool.write_text("#!/bin/sh\n", encoding="utf-8")
       tool.chmod(0o755)
       compatible, detail = oracle_kit_compatibility(tool)
