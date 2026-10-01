@@ -99,6 +99,7 @@ def uploader_ready(started: bool, params: Params, CP: car.CarParams) -> bool:
     return only_offroad(started, params, CP)
 
   return always_run(started, params, CP)
+
 def tss3_oracle_auto(started: bool, params: Params, CP: car.CarParams) -> bool:
   return params.get_bool("Tss3OracleAutoArm")
 

@@ -17,6 +17,10 @@ class FakePanda:
   def list():
     return ["fake"]
 
+  @staticmethod
+  def spi_list():
+    return ["fake"]
+
   def __init__(self, *args, **kwargs):
     pass
 
