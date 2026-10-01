@@ -84,17 +84,14 @@ class DeveloperLayoutMici(NavScroller):
     self._alpha_long_toggle = BigToggle("alpha longitudinal",
                                         initial_state=ui_state.params.get_bool("AlphaLongitudinalEnabled"),
                                         toggle_callback=self._on_alpha_long_enabled)
-    self._tss3_oracle_auto_toggle = BigParamControl(
-      "auto-arm TSS3 oracle", "Tss3OracleAutoArm",
-      description="Exact 2026 Camry F33 only. Preserves normal sleep behavior while OFF, then starts the volatile RAM-oracle bringup on " +
-                  "native Panda ignition detection. " +
-                  "No EPS flash writes and no automatic Brake/FRC resets on a healthy run."
+    self._tss3_oracle_auto_toggle = BigToggle(
+      "auto-arm TSS3 oracle", "Camry F33, RAM-only",
+      initial_state=ui_state.params.get_bool("Tss3OracleAutoArm"),
+      toggle_callback=self._on_tss3_oracle_auto_arm,
     )
 
     self._tss3_oracle_button = BigButton(
-      "TSS3 oracle bringup", "ARM",
-      description="Exact 2026 Camry F33 only. Arm while fully OFF and in Park, then press the brake and POWER normally. " +
-                  "The native comma page stays open through RAM-oracle installation and no-reset verification."
+      "TSS3 oracle bringup", "Camry F33, Park and powered off",
     )
     self._tss3_oracle_button.set_click_callback(self._on_tss3_oracle_bringup)
     self._debug_mode_toggle = BigParamControl("ui debug mode", "ShowDebugInfo",
@@ -188,6 +185,9 @@ class DeveloperLayoutMici(NavScroller):
     # Refresh toggles from params to mirror external changes
     for key, item in self._refresh_toggles:
       item.set_checked(ui_state.params.get_bool(key))
+
+  def _on_tss3_oracle_auto_arm(self, state: bool):
+    ui_state.params.put_bool("Tss3OracleAutoArm", state, block=True)
 
   def _on_tss3_oracle_bringup(self):
     if ui_state.is_offroad() and tool_available():

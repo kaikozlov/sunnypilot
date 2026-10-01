@@ -143,6 +143,15 @@ def test_native_oracle_handoff_waits_for_lease_without_recovery():
     ready = Path(td) / "ready"
     launches = []
     ready_observed = []
+    handoff_checked = threading.Event()
+    original_active_lease = pandad._active_direct_panda_lease
+
+    def active_lease_after_handoff_check():
+      if launches and launches[0].exited and not handoff_checked.is_set():
+        handoff_checked.set()
+        return None
+      return original_active_lease()
+
 
     def factory(handlers):
       class Process:
@@ -161,7 +170,7 @@ def test_native_oracle_handoff_waits_for_lease_without_recovery():
             ident = f"{os.getpid()} oracle-handoff-test"
 
             def request_and_release_lease():
-              time.sleep(0.02)
+              handoff_checked.wait(2.0)
               lease.write_text(ident + "\n", encoding="utf-8")
               deadline = time.monotonic() + 2.0
               while time.monotonic() < deadline:
@@ -188,7 +197,8 @@ def test_native_oracle_handoff_waits_for_lease_without_recovery():
 
       return popen
 
-    hardware = _run_main_with_processes(factory, lease, ready)
+    with mock.patch.object(pandad, "_active_direct_panda_lease", active_lease_after_handoff_check):
+      hardware = _run_main_with_processes(factory, lease, ready)
     assert hardware.reset_count == 1
     assert hardware.recover_count == 0
     assert len(launches) == 2
