@@ -1,3 +1,9 @@
+Unreleased (TSS3 Camry fork)
+===========================
+* Fix MADS lateral-only engagement and re-engagement on the 2026 Camry by decoding cruise-main and LTA-switch inputs in Panda safety.
+  * Reuses sunnypilot's shared MADS authorization, brake, and heartbeat handling; longitudinal permission remains independent.
+  * Verified against recorded drive inputs and receive-driven safety regressions. Updated Panda firmware is required; on-vehicle validation remains necessary.
+
 Version 0.11.2 (2026-08-12)
 =======================
 * New driving model
