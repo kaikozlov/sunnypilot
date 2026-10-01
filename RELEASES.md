@@ -1,8 +1,10 @@
 Unreleased (TSS3 Camry fork)
 ===========================
-* Fix MADS lateral-only engagement and re-engagement on the 2026 Camry by decoding cruise-main and LTA-switch inputs in Panda safety.
-  * Reuses sunnypilot's shared MADS authorization, brake, and heartbeat handling; longitudinal permission remains independent.
-  * Verified against recorded drive inputs and receive-driven safety regressions. Updated Panda firmware is required; on-vehicle validation remains necessary.
+* Fix MADS lateral-only engagement and re-engagement on the 2026 Camry.
+  * Decode cruise-main and LTA-switch inputs through sunnypilot's shared MADS safety state.
+  * When openpilot longitudinal control is inactive, preserve the live FRC longitudinal applications inside the signed comma `0x08A` and replace only lateral fields and request sequence.
+  * Panda accepts that composite request only when its preserved fields match a recent FRC request; an openpilot longitudinal application still requires longitudinal authorization and acceleration limits.
+  * Verified against recorded drive inputs, ownership-transition regressions, the canonical OpenDBC suite, and a Panda H7 firmware build. Updated Panda firmware is required; corrected behavior has not yet been validated on-road.
 
 Version 0.11.2 (2026-08-12)
 =======================
