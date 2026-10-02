@@ -6,12 +6,6 @@ Unreleased (TSS3 Camry fork)
   * Panda accepts that composite request only when its preserved fields match a recent FRC request; an openpilot longitudinal application still requires longitudinal authorization and acceleration limits.
   * Verified against recorded drive inputs, ownership-transition regressions, the canonical OpenDBC suite, and a Panda H7 firmware build. Updated Panda firmware is required; corrected behavior has not yet been validated on-road.
 
-* Isolate TSS3 cruise engagement when openpilot controls longitudinal.
-  * Use non-PCM SET/RES engagement, CANCEL disengagement, and a host/Panda cruise-main state instead of the FRC's cruise latch.
-  * Relay-block all `CRUISE_BUTTONS` (`0x0FE`) frames from reaching the FRC while openpilot controls longitudinal, so the stock state machine can never engage cruise; openpilot still reads the buttons natively on bus 0. Stock-longitudinal mode keeps forwarding everything unchanged. No Panda firmware changes are required.
-  * Clear a pre-existing FRC cruise latch with the stock cancel command, preserving FRC PCS/AEB operation.
-  * Verified against three recorded route segments, host and safety ownership regressions, and the canonical OpenDBC suite.
-
 Version 0.11.2 (2026-08-12)
 =======================
 * New driving model
