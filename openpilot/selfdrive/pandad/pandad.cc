@@ -581,7 +581,7 @@ void send_peripheral_state(Panda *panda, PubMaster *pm) {
   pm->send("peripheralState", msg);
 }
 
-void process_panda_state(Panda *panda, PubMaster *pm, bool engaged, bool is_onroad, bool spoofing_started, bool always_offroad, bool startup_catcher_active) {
+void process_panda_state(Panda *panda, PubMaster *pm, bool engaged, bool engaged_mads, bool is_onroad, bool spoofing_started, bool always_offroad, bool startup_catcher_active) {
   auto ignition_opt = send_panda_states(pm, panda, is_onroad, spoofing_started, always_offroad, startup_catcher_active);
   if (!ignition_opt) {
     LOGE("Failed to get ignition_opt");
