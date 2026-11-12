@@ -16,7 +16,11 @@ export VECLIB_MAXIMUM_THREADS=1
 export QCOM_PRIORITY=12
 
 if [ -z "$AGNOS_VERSION" ]; then
+<<<<<<< HEAD
   export AGNOS_VERSION="20.2"
+=======
+  export AGNOS_VERSION="20.5"
+>>>>>>> d2200f170 (AGNOS 20.5 (#39304))
 fi
 
 export STAGING_ROOT="/data/safe_staging"

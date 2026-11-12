@@ -56,13 +56,20 @@
   },
   {
     "name": "boot",
+<<<<<<< HEAD
     "url": "https://commadist.azureedge.net/agnosupdate/boot-e5dd1f6f515c96b08571678ce00119a7682b72a12ccab02ecd780bf2a305c882.img.xz",
     "hash": "e5dd1f6f515c96b08571678ce00119a7682b72a12ccab02ecd780bf2a305c882",
     "hash_raw": "e5dd1f6f515c96b08571678ce00119a7682b72a12ccab02ecd780bf2a305c882",
+=======
+    "url": "https://commadist.azureedge.net/agnosupdate/boot-b457040d21dbce63938a4ba7c9adc87a5de1486cf26f46a0a780032be28a0b6e.img.xz",
+    "hash": "b457040d21dbce63938a4ba7c9adc87a5de1486cf26f46a0a780032be28a0b6e",
+    "hash_raw": "b457040d21dbce63938a4ba7c9adc87a5de1486cf26f46a0a780032be28a0b6e",
+>>>>>>> d2200f170 (AGNOS 20.5 (#39304))
     "size": 46897152,
     "sparse": false,
     "full_check": true,
     "has_ab": true,
+<<<<<<< HEAD
     "ondevice_hash": "44f3cf1891cb093d5f0abdc80441f2f81f2b1548c536ed14d4948841f0f279a8"
   },
   {
@@ -70,14 +77,30 @@
     "url": "https://commadist.azureedge.net/agnosupdate/system-8faed425880ec5a7ca9f57ba6a783544ce19e0c7836f0e8c13abc5d2210b6258.img.xz",
     "hash": "76e1299bbe4455e3b9a3d1edb9fbac35908202574ad861a7e99fc2b10740329e",
     "hash_raw": "8faed425880ec5a7ca9f57ba6a783544ce19e0c7836f0e8c13abc5d2210b6258",
+=======
+    "ondevice_hash": "e3b5de13bfbcdc471c9318751a8ec249fc1c8df8cfc298fba6c2df9297f3352a"
+  },
+  {
+    "name": "system",
+    "url": "https://commadist.azureedge.net/agnosupdate/system-193e949cd7a1f3b285ee6efbf7168686c77122d1f89966d9d911ad5afa7ad371.img.xz",
+    "hash": "a4f49bc3e25a5aaf6522d379601dcdb0442001ba709587343b478496706b860f",
+    "hash_raw": "193e949cd7a1f3b285ee6efbf7168686c77122d1f89966d9d911ad5afa7ad371",
+>>>>>>> d2200f170 (AGNOS 20.5 (#39304))
     "size": 2147483648,
     "sparse": true,
     "full_check": false,
     "has_ab": true,
+<<<<<<< HEAD
     "ondevice_hash": "c46b0b862eb44b75d5b4347441dc11e6462a211dc66693cfcaf4d30824805563",
     "alt": {
       "hash": "8faed425880ec5a7ca9f57ba6a783544ce19e0c7836f0e8c13abc5d2210b6258",
       "url": "https://commadist.azureedge.net/agnosupdate/system-8faed425880ec5a7ca9f57ba6a783544ce19e0c7836f0e8c13abc5d2210b6258.img",
+=======
+    "ondevice_hash": "c318529ad8fe67c477eafa759fd421699818d151d794c7761b310b268a35e5c5",
+    "alt": {
+      "hash": "193e949cd7a1f3b285ee6efbf7168686c77122d1f89966d9d911ad5afa7ad371",
+      "url": "https://commadist.azureedge.net/agnosupdate/system-193e949cd7a1f3b285ee6efbf7168686c77122d1f89966d9d911ad5afa7ad371.img",
+>>>>>>> d2200f170 (AGNOS 20.5 (#39304))
       "size": 2147483648
     }
   }
