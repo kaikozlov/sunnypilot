@@ -112,8 +112,8 @@ public:
       if (state_ == State::ARMED && frame.src == TSS3_DIAG_BUS && frame.address == TSS3_WAKE_TRIGGER_ADDR) {
         start_prewarm(panda, nanos_since_boot());
       }
-      if (state_ == State::CATCHING && frame.address == TSS3_EPS_RX && frame.src == TSS3_DIAG_BUS &&
-          is_tss3_exact_extended_response(frame.dat)) {
+      if ((state_ == State::PREWARM || state_ == State::CATCHING) &&
+          frame.address == TSS3_EPS_RX && frame.src == TSS3_DIAG_BUS && is_tss3_exact_extended_response(frame.dat)) {
         const uint64_t positive_ns = nanos_since_boot();
         positive_extended_frame_ = frame.dat;
         panda->can_send(TSS3_EPS_TX, TSS3_PROGRAMMING_FRAME, TSS3_DIAG_BUS);
