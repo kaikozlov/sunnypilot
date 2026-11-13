@@ -37,6 +37,17 @@ class TestOracleStatus(unittest.TestCase):
         self.assertIs(result["done"], returncode == 0)
         self.assertIs(result["error"], returncode != 0)
 
+  def test_bus_sleep_is_neither_installation_success_nor_failure(self):
+    for returncode in (0, 2):
+      with self.subTest(returncode=returncode):
+        report = OracleStatus()
+        report.feed(json.dumps(status_row(stage="sleeping", done=False, progress=0)))
+        result = report.finish(returncode)
+        self.assertFalse(result["done"])
+        self.assertIs(result["error"], returncode != 0)
+        if returncode == 0:
+          self.assertEqual(result["stage"], "sleeping")
+
   def test_exit_without_completion_is_not_success(self):
     for rows in ([], [status_row(stage="verifying", done=False, progress=70)]):
       with self.subTest(rows=rows):

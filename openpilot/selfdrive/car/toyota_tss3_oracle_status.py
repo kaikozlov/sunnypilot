@@ -47,7 +47,9 @@ class OracleStatus:
     return status
 
   def finish(self, returncode: int) -> dict[str, Any]:
-    if self._status is not None and (self._status["error"] or (returncode == 0 and self._status["done"])):
+    if self._status is not None and (self._status["error"] or (
+      returncode == 0 and (self._status["done"] or self._status["stage"] == "sleeping")
+    )):
       return self._status
     detail = f"Backend exited with status {returncode}." if returncode != 0 else "Backend exited without a completion status."
     if self._last_output:
